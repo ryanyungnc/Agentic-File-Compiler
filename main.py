@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import pandas as pd
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
@@ -23,6 +24,15 @@ class Block(BaseModel):
 class Document(BaseModel):
     title: str
     blocks: list[Block]
+
+def prepare_file(path):
+    if path.endswith(".xlsx"):
+        # convert to CSV first
+        df = pd.read_excel(path)
+        csv_path = path.replace(".xlsx", ".csv")
+        df.to_csv(csv_path, index=False)
+        return csv_path
+    return path
 
 def generate_image_block(prompt, filename):
     response = client.models.generate_content(
@@ -134,7 +144,8 @@ def build_executive_summary(file_paths):
     
     for path in file_paths:
         print(f"Uploading {path}...")
-        file_ref = client.files.upload(path = path)
+        path = prepare_file(path)
+        file_ref = client.files.upload(file = path)
 
         while file_ref.state == "PROCESSING":
             time.sleep(2)
@@ -178,3 +189,19 @@ def build_executive_summary(file_paths):
         
         contents.append(response.candidates[0].content)
         contents.append(types.Content(role = "tool", parts = tool_results))
+
+
+#Main testing (Use python3 main.py + file names seperated by space)
+
+if __name__ == "__main__":
+    import sys
+
+    test_files = sys.argv[1:] if len(sys.argv) > 1 else ["test.txt"]
+
+    print(f"Building executive summary for: {test_files}")
+    doc = build_executive_summary(test_files)
+
+    print(f"\nTitle: {doc.title}")
+    print(f"Blocks ({len(doc.blocks)}):")
+    for i, block in enumerate(doc.blocks):
+        print(f"  [{i}] {block.type.value}: {block.content[:80]}...")
